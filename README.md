@@ -38,7 +38,7 @@ mon pytest
 mon ./server.sh
 ```
 
-Click the menu bar icon to open the popover. It auto-refreshes every 3 seconds.
+Click the menu bar icon to open the popover. It updates instantly as `mon` writes new status.
 
 ## Features
 
@@ -53,7 +53,7 @@ Click the menu bar icon to open the popover. It auto-refreshes every 3 seconds.
 
 `mon` launches your command through a **pseudo-terminal** (pty) so programs flush output naturally instead of buffering until exit. It writes a JSON status file to `~/.process_monitor/<pid>.json` every 3 seconds and streams all output to `~/.process_monitor/<pid>.log`.
 
-`ProcessMonitor.app` polls that directory on a 3-second `Timer`, decodes each JSON file, reads the tail of the log, strips ANSI escape codes, and renders everything in the SwiftUI popover.
+`ProcessMonitor.app` watches that directory with **FSEvents** (`FSEventStreamCreate`) and reacts within ~200ms whenever `mon` writes a new status file. It decodes each JSON file, reads the tail of the log, strips ANSI escape codes, and renders everything in the SwiftUI popover.
 
 ## Project structure
 
@@ -65,7 +65,7 @@ ProcessMonitor/
     ProcessMonitorApp.swift      # App entry point + MenuBarExtra setup
     MainView.swift               # Popover UI, filter tabs, rows, log overlay
     Models.swift                 # ProcessInfo struct + computed properties
-    ProcessStore.swift           # File watcher, timer, ANSI strip
+    ProcessStore.swift           # FSEvents watcher, ANSI strip
     Assets.xcassets/
 extras/
   process_monitor.5s.sh          # SwiftBar plugin (alternative to native app)

@@ -1,3 +1,4 @@
+import CoreServices
 import Foundation
 import Observation
 
@@ -5,18 +6,53 @@ import Observation
 class ProcessStore {
     var processes: [ProcessInfo] = []
 
-    private var timer: Timer?
+    private var fsStream: FSEventStreamRef?
     private let monDir: URL
 
     init() {
         monDir = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(".process_monitor")
         load()
-        let t = Timer(timeInterval: 3, repeats: true) { [weak self] _ in
-            DispatchQueue.main.async { self?.load() }
+        startWatching()
+    }
+
+    deinit {
+        if let stream = fsStream {
+            FSEventStreamStop(stream)
+            FSEventStreamInvalidate(stream)
+            FSEventStreamRelease(stream)
         }
-        RunLoop.main.add(t, forMode: .common)
-        timer = t
+    }
+
+    private func startWatching() {
+        let path = monDir.path as CFString
+        let paths = [path] as CFArray
+
+        // Pass unretained self — ProcessStore lives for the app's lifetime.
+        var ctx = FSEventStreamContext(
+            version: 0,
+            info: Unmanaged.passUnretained(self).toOpaque(),
+            retain: nil, release: nil, copyDescription: nil
+        )
+
+        let callback: FSEventStreamCallback = { _, info, _, _, _, _ in
+            guard let info else { return }
+            let store = Unmanaged<ProcessStore>.fromOpaque(info).takeUnretainedValue()
+            DispatchQueue.main.async { store.load() }
+        }
+
+        // 0.2s latency — reacts almost instantly when mon writes a status file.
+        fsStream = FSEventStreamCreate(
+            nil, callback, &ctx, paths,
+            FSEventStreamEventId(kFSEventStreamEventIdSinceNow),
+            0.2,
+            FSEventStreamCreateFlags(kFSEventStreamCreateFlagNone)
+        )
+
+        if let stream = fsStream {
+            FSEventStreamSetDispatchQueue(stream, .main)
+            FSEventStreamStart(stream)
+        }
     }
 
     func load() {
@@ -71,9 +107,9 @@ class ProcessStore {
         if running.count == 1 {
             let p = running[0]
             var parts = [p.name]
-            if let cpu = p.cpu_pct  { parts.append(String(format: "%.0f%%", cpu)) }
+            if let cpu = p.cpu_pct     { parts.append(String(format: "%.0f%%", cpu)) }
             if let mem = p.formattedMem { parts.append(mem) }
-            if let e = p.elapsed    { parts.append(e) }
+            if let e = p.elapsed       { parts.append(e) }
             return parts.joined(separator: " · ")
         }
         if running.count > 1 { return "\(running.count) running" }
