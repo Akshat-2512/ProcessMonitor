@@ -4,8 +4,7 @@ Ever kicked off a training run, switched to another app, and had no idea if it w
 
 ProcessMonitor puts a live status indicator in your menu bar so you always know what's running, how long it's been going, and what it last printed — without switching back to a terminal window.
 
-![Popover showing running process with CPU/memory bars and live output](screenshot.png)
-![Log overlay showing full scrollable output](screenshot-log.png)
+<img src="screenshot.png" width="48%"> <img src="screenshot-log.png" width="48%">
 
 ## The problem
 
