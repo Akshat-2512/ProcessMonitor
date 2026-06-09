@@ -67,19 +67,7 @@ ProcessMonitor/
     Models.swift                 # ProcessInfo struct + computed properties
     ProcessStore.swift           # FSEvents watcher, ANSI strip
     Assets.xcassets/
-extras/
-  process_monitor.5s.sh          # SwiftBar plugin (alternative to native app)
-  process-monitor.jsx            # Übersicht desktop widget (alternative)
-  training_status_writer.py      # Optional PyTorch metrics helper
 ```
-
-## Extras
-
-The `extras/` folder contains alternative frontends built during development:
-
-- **SwiftBar plugin** (`process_monitor.5s.sh`) — lightweight menu bar plugin using [SwiftBar](https://github.com/swiftbar/SwiftBar), no Xcode required
-- **Übersicht widget** (`process-monitor.jsx`) — floating desktop widget using [Übersicht](https://tracesof.net/uebersicht/)
-- **PyTorch helper** (`training_status_writer.py`) — writes training metrics (loss, accuracy, epoch) directly without wrapping with `mon`
 
 ## Requirements
 
