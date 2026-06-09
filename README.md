@@ -1,15 +1,30 @@
 # ProcessMonitor
 
-A native macOS menu bar app that monitors any terminal process in real time — CPU, memory, elapsed time, and live output.
+Ever kicked off a training run, switched to another app, and had no idea if it was still going — or had silently crashed hours ago?
 
-## Overview
+ProcessMonitor puts a live status indicator in your menu bar so you always know what's running, how long it's been going, and what it last printed — without switching back to a terminal window.
+
+![menu bar showing python · 43% · 2.1GB · 1:24:07](screenshot.png)
+
+## The problem
+
+When you run a long job in the terminal — ML training, a build, a test suite — you lose visibility the moment you switch windows. You either:
+- Keep a terminal visible at all times, taking up screen space
+- Constantly switch back to check if it's still alive
+- Come back later to find it silently died at epoch 3
+
+ProcessMonitor fixes this by surfacing that info as a persistent menu bar widget.
+
+## How it works
 
 ProcessMonitor has two parts:
 
 | Component | What it does |
 |---|---|
 | `mon` | CLI wrapper — runs any command and streams live status to `~/.process_monitor/` |
-| `ProcessMonitor.app` | Native SwiftUI menu bar app — reads those files and shows them in a popover |
+| `ProcessMonitor.app` | Native SwiftUI menu bar app — watches those files with FSEvents and shows them instantly |
+
+`mon` launches your command through a **pseudo-terminal** so programs flush output naturally (no buffering). It writes a JSON status file every 3 seconds and streams all output to a log file. The app reacts within ~200ms using FSEvents whenever that file changes.
 
 ## Install
 
@@ -22,9 +37,9 @@ chmod +x /usr/local/bin/mon
 
 ### 2. Build the macOS app
 
-Open `ProcessMonitor/ProcessMonitor.xcodeproj` in Xcode, then press **⌘R** to build and run.
+Open `ProcessMonitor/ProcessMonitor.xcodeproj` in Xcode and press **⌘R**.
 
-> **Sandbox note:** In Xcode → Signing & Capabilities, make sure **App Sandbox is disabled** so the app can read from `~/.process_monitor/`.
+> **Sandbox note:** In Xcode → Signing & Capabilities, disable **App Sandbox** so the app can read from `~/.process_monitor/`.
 
 ## Usage
 
@@ -35,25 +50,19 @@ mon python train.py --epochs 100
 mon --name "Build" make all
 mon npm run build
 mon pytest
-mon ./server.sh
 ```
 
-Click the menu bar icon to open the popover. It updates instantly as `mon` writes new status.
+Click the menu bar icon to open the popover. While you work in other apps, the menu bar shows the active process name, CPU %, memory, and elapsed time at a glance.
 
 ## Features
 
+- **Menu bar title** — `python · 45% · 1.1GB · 0:12` always visible
 - **Filter tabs** — Running / Done / All
 - **Live stats** — CPU % and memory with animated progress bars
 - **Output preview** — last 4 lines of stdout/stderr per process
 - **Log overlay** — double-click any row to open a full scrollable log
-- **ANSI stripping** — color codes and `\r` from tqdm are cleaned automatically
-- **Menu bar title** — shows `python · 45% · 1.1GB · 0:12` for the active process
-
-## How it works
-
-`mon` launches your command through a **pseudo-terminal** (pty) so programs flush output naturally instead of buffering until exit. It writes a JSON status file to `~/.process_monitor/<pid>.json` every 3 seconds and streams all output to `~/.process_monitor/<pid>.log`.
-
-`ProcessMonitor.app` watches that directory with **FSEvents** (`FSEventStreamCreate`) and reacts within ~200ms whenever `mon` writes a new status file. It decodes each JSON file, reads the tail of the log, strips ANSI escape codes, and renders everything in the SwiftUI popover.
+- **Instant updates** — FSEvents watcher reacts in ~200ms, no polling
+- **ANSI stripping** — color codes and `\r` from tqdm cleaned automatically
 
 ## Project structure
 
@@ -71,6 +80,6 @@ ProcessMonitor/
 
 ## Requirements
 
-- macOS 14+ (Sonoma) — uses `MenuBarExtra` with `.window` style
+- macOS 14+ (Sonoma)
 - Python 3 — for the `mon` CLI
 - Xcode 16+ — to build the app
