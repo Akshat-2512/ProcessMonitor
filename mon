@@ -1,0 +1,165 @@
+#!/usr/bin/env python3
+"""
+mon — monitor any process in the ProcessMonitor widget
+
+Usage:
+    mon [--name LABEL] <command> [args...]
+
+Examples:
+    mon python train.py --epochs 50
+    mon --name "Build" make all
+    mon ./server.sh
+"""
+import argparse
+import json
+import os
+import pty
+import select
+import subprocess
+import sys
+import threading
+import time
+from datetime import timedelta
+from pathlib import Path
+
+MON_DIR = Path.home() / ".process_monitor"
+MON_DIR.mkdir(exist_ok=True)
+
+
+def get_proc_stats(pid):
+    try:
+        r = subprocess.run(
+            ["ps", "-p", str(pid), "-o", "pcpu=,rss="],
+            capture_output=True, text=True
+        )
+        if r.returncode == 0:
+            parts = r.stdout.strip().split()
+            if len(parts) >= 2:
+                return {
+                    "cpu_pct": round(float(parts[0]), 1),
+                    "mem_mb": round(int(parts[1]) / 1024, 1),
+                }
+    except Exception:
+        pass
+    return {}
+
+
+def tail_log(log_path, n=4):
+    try:
+        with open(log_path, "rb") as f:
+            f.seek(0, 2)
+            size = f.tell()
+            if size == 0:
+                return []
+            f.seek(max(0, size - 3000))
+            lines = f.read().decode("utf-8", errors="replace").strip().split("\n")
+            return [l for l in lines[-n:] if l.strip()]
+    except Exception:
+        return []
+
+
+def write_status(path, data):
+    path.write_text(json.dumps(data, indent=2))
+
+
+def main():
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument("--name", "-n", default=None)
+    parser.add_argument("--help", "-h", action="store_true")
+    args, remaining = parser.parse_known_args()
+
+    if args.help or not remaining:
+        print(__doc__)
+        sys.exit(0)
+
+    cmd = remaining
+    name = args.name or os.path.basename(cmd[0])
+    start_time = time.time()
+
+    # Use a pseudo-terminal so the child process thinks it has a real TTY.
+    # This prevents Python (and other programs) from switching to block buffering,
+    # which causes output to appear "stuck" when stdout is a plain pipe.
+    master_fd, slave_fd = pty.openpty()
+
+    proc = subprocess.Popen(
+        cmd,
+        stdin=subprocess.DEVNULL,
+        stdout=slave_fd,
+        stderr=slave_fd,
+        close_fds=True,
+    )
+    os.close(slave_fd)
+
+    pid = proc.pid
+    log_file = MON_DIR / f"{pid}.log"
+    status_file = MON_DIR / f"{pid}.json"
+
+    print(f"[mon] {name!r} started  PID={pid}")
+    print(f"[mon] Log → {log_file}", flush=True)
+
+    def stream():
+        log_f = open(log_file, "wb")
+        try:
+            while True:
+                try:
+                    r, _, _ = select.select([master_fd], [], [], 0.5)
+                    if r:
+                        data = os.read(master_fd, 4096)
+                        sys.stdout.buffer.write(data)
+                        sys.stdout.buffer.flush()
+                        log_f.write(data)
+                        log_f.flush()
+                except OSError:
+                    # master_fd closed when child exits
+                    break
+        finally:
+            log_f.close()
+            try:
+                os.close(master_fd)
+            except OSError:
+                pass
+
+    t = threading.Thread(target=stream, daemon=True)
+    t.start()
+
+    try:
+        while proc.poll() is None:
+            elapsed = int(time.time() - start_time)
+            write_status(status_file, {
+                "pid": pid,
+                "name": name,
+                "cmd": " ".join(cmd),
+                "running": True,
+                "elapsed": str(timedelta(seconds=elapsed)),
+                "last_lines": tail_log(log_file),
+                "log": str(log_file),
+                **get_proc_stats(pid),
+            })
+            time.sleep(3)
+    except KeyboardInterrupt:
+        proc.terminate()
+
+    proc.wait()
+    t.join(timeout=2)
+
+    exit_code = proc.returncode
+    elapsed = int(time.time() - start_time)
+
+    write_status(status_file, {
+        "pid": pid,
+        "name": name,
+        "cmd": " ".join(cmd),
+        "running": False,
+        "exit_code": exit_code,
+        "elapsed": str(timedelta(seconds=elapsed)),
+        "last_lines": tail_log(log_file),
+        "log": str(log_file),
+    })
+
+    label = "Done" if exit_code == 0 else f"Failed (exit {exit_code})"
+    print(f"\n[mon] {name} {label}  ({timedelta(seconds=elapsed)})", flush=True)
+    sys.exit(exit_code)
+
+
+if __name__ == "__main__":
+    main()
