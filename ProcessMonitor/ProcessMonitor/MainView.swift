@@ -15,7 +15,7 @@ struct MainView: View {
     var visible: [ProcessInfo] {
         switch filter {
         case .running: return store.running
-        case .done:    return Array(store.done.prefix(8))
+        case .done:    return Array(store.done.suffix(8))
         case .all:     return store.processes
         }
     }

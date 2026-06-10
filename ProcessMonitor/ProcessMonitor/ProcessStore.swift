@@ -58,19 +58,21 @@ class ProcessStore {
     func load() {
         guard let files = try? FileManager.default.contentsOfDirectory(
             at: monDir,
-            includingPropertiesForKeys: [.contentModificationDateKey],
+            includingPropertiesForKeys: [.creationDateKey],
             options: .skipsHiddenFiles
         ) else {
             processes = []
             return
         }
 
+        // Sort by creation date (= process start time) so the list keeps a
+        // stable order; modification date changes every status write.
         processes = files
             .filter { $0.pathExtension == "json" }
             .sorted {
-                let a = (try? $0.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
-                let b = (try? $1.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
-                return a > b
+                let a = (try? $0.resourceValues(forKeys: [.creationDateKey]).creationDate) ?? .distantPast
+                let b = (try? $1.resourceValues(forKeys: [.creationDateKey]).creationDate) ?? .distantPast
+                return a < b
             }
             .compactMap { url in
                 guard let data = try? Data(contentsOf: url),
