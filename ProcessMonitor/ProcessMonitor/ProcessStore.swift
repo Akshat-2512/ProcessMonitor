@@ -100,6 +100,14 @@ class ProcessStore {
                                       with: "", options: .regularExpression)
     }
 
+    func kill(pid: Int) {
+        // SIGTERM the child process; mon notices the exit and writes final status.
+        Darwin.kill(pid_t(pid), SIGTERM)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+            self?.load()
+        }
+    }
+
     var running: [ProcessInfo] { processes.filter(\.running) }
     var done: [ProcessInfo]    { processes.filter { !$0.running } }
 

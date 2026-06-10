@@ -35,7 +35,8 @@ struct MainView: View {
                         if !runningProcs.isEmpty {
                             SectionHeader(title: "Running")
                             ForEach(runningProcs) { proc in
-                                RunningRow(proc: proc, expandedPid: $expandedPid)
+                                RunningRow(proc: proc, expandedPid: $expandedPid,
+                                           onKill: { store.kill(pid: proc.pid) })
                                 Divider().opacity(0.2).padding(.horizontal, 14)
                             }
                         }
@@ -49,7 +50,8 @@ struct MainView: View {
                     } else {
                         ForEach(visible) { proc in
                             if proc.running {
-                                RunningRow(proc: proc, expandedPid: $expandedPid)
+                                RunningRow(proc: proc, expandedPid: $expandedPid,
+                                           onKill: { store.kill(pid: proc.pid) })
                             } else {
                                 DoneRow(proc: proc, expandedPid: $expandedPid)
                             }
@@ -181,10 +183,13 @@ struct SectionHeader: View {
 struct RunningRow: View {
     let proc: ProcessInfo
     @Binding var expandedPid: Int?
+    var onKill: () -> Void = {}
+
+    @State private var confirmingKill = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            // Top row: dot + name + elapsed
+            // Top row: dot + name + elapsed + kill
             HStack(spacing: 8) {
                 Circle()
                     .fill(Color.green)
@@ -200,6 +205,8 @@ struct RunningRow: View {
                 Text(proc.elapsed ?? "")
                     .font(.system(size: 11, design: .monospaced))
                     .foregroundStyle(.secondary)
+
+                KillButton(confirming: $confirmingKill, onKill: onKill)
             }
 
             // Command
@@ -241,6 +248,46 @@ struct RunningRow: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
+    }
+}
+
+// MARK: - Kill button (two-step confirm)
+
+struct KillButton: View {
+    @Binding var confirming: Bool
+    let onKill: () -> Void
+
+    var body: some View {
+        Button {
+            if confirming {
+                onKill()
+                confirming = false
+            } else {
+                confirming = true
+                DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                    confirming = false
+                }
+            }
+        } label: {
+            if confirming {
+                Text("confirm kill?")
+                    .font(.system(size: 9, weight: .semibold))
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 3)
+                    .background(Color.red.opacity(0.85))
+                    .foregroundStyle(.white)
+                    .clipShape(RoundedRectangle(cornerRadius: 5))
+            } else {
+                Image(systemName: "stop.fill")
+                    .font(.system(size: 9))
+                    .padding(5)
+                    .background(Color.red.opacity(0.12))
+                    .foregroundStyle(.red)
+                    .clipShape(RoundedRectangle(cornerRadius: 5))
+            }
+        }
+        .buttonStyle(.plain)
+        .help("Kill this process")
     }
 }
 

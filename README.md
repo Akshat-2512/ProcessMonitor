@@ -61,6 +61,7 @@ Click the menu bar icon to open the popover. While you work in other apps, the m
 - **Live stats** — CPU % and memory with animated progress bars
 - **Output preview** — last 4 lines of stdout/stderr per process
 - **Log overlay** — double-click any row to open a full scrollable log
+- **Kill from the widget** — stop button on each running process (click twice to confirm)
 - **Instant updates** — FSEvents watcher reacts in ~200ms, no polling
 - **ANSI stripping** — color codes and `\r` from tqdm cleaned automatically
 
