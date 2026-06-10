@@ -75,6 +75,10 @@ class ProcessStore {
             .compactMap { url in
                 guard let data = try? Data(contentsOf: url),
                       var proc = try? JSONDecoder().decode(ProcessInfo.self, from: data) else { return nil }
+                // Don't trust a stale "running" status — verify the pid is alive.
+                if proc.running && !Self.isAlive(pid: proc.pid) {
+                    proc = proc.markedFinished()
+                }
                 if let logPath = proc.log {
                     proc = proc.withLogLines(readLogLines(logPath, count: 60))
                 }
@@ -106,6 +110,20 @@ class ProcessStore {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
             self?.load()
         }
+        // If it ignored SIGTERM, escalate after a grace period.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in
+            if Self.isAlive(pid: pid) {
+                Darwin.kill(pid_t(pid), SIGKILL)
+            }
+            self?.load()
+        }
+    }
+
+    // Signal 0 probes existence without sending anything. EPERM still
+    // means the process exists, just owned by someone else.
+    private static func isAlive(pid: Int) -> Bool {
+        if Darwin.kill(pid_t(pid), 0) == 0 { return true }
+        return errno == EPERM
     }
 
     var running: [ProcessInfo] { processes.filter(\.running) }

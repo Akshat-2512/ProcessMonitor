@@ -48,4 +48,13 @@ struct ProcessInfo: Identifiable, Codable {
                     last_lines: last_lines, log_lines: lines,
                     log: log, exit_code: exit_code)
     }
+
+    // The status file claims "running" but the pid is gone (killed, or mon
+    // itself died before writing the final status).
+    func markedFinished() -> ProcessInfo {
+        ProcessInfo(pid: pid, name: name, cmd: cmd, running: false,
+                    elapsed: elapsed, cpu_pct: nil, mem_mb: nil,
+                    last_lines: last_lines, log_lines: log_lines,
+                    log: log, exit_code: exit_code)
+    }
 }
