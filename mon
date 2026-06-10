@@ -11,12 +11,16 @@ Examples:
     mon ./server.sh
 """
 import argparse
+import fcntl
 import json
 import os
 import pty
 import select
+import signal
+import struct
 import subprocess
 import sys
+import termios
 import threading
 import time
 from datetime import timedelta
@@ -62,6 +66,19 @@ def write_status(path, data):
     path.write_text(json.dumps(data, indent=2))
 
 
+def copy_winsize(fd):
+    """Mirror the real terminal's size onto the pty so child programs
+    (tqdm, pip, ...) wrap their output at the right column."""
+    try:
+        if sys.stdout.isatty():
+            winsz = fcntl.ioctl(sys.stdout.fileno(), termios.TIOCGWINSZ, b"\0" * 8)
+        else:
+            winsz = struct.pack("HHHH", 24, 120, 0, 0)
+        fcntl.ioctl(fd, termios.TIOCSWINSZ, winsz)
+    except OSError:
+        pass
+
+
 def main():
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument("--name", "-n", default=None)
@@ -80,6 +97,9 @@ def main():
     # This prevents Python (and other programs) from switching to block buffering,
     # which causes output to appear "stuck" when stdout is a plain pipe.
     master_fd, slave_fd = pty.openpty()
+    copy_winsize(slave_fd)
+    # Keep the pty size in sync when the user resizes their terminal window.
+    signal.signal(signal.SIGWINCH, lambda *_: copy_winsize(master_fd))
 
     proc = subprocess.Popen(
         cmd,
